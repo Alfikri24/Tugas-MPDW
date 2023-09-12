@@ -1,0 +1,194 @@
+---
+title: "Tugas 2 MPDW"
+author: "Alfikri Ihsan"
+date: "2023-09-10"
+output: html_document
+---
+1. Memaggil package
+```{r}
+library(rio)
+library(readxl)
+library(dplyr)
+library(TTR)
+library(forecast)
+library(lmtest)
+library(orcutt)
+library(HoRM)
+```
+
+
+
+2. Memasukkan Data
+```{r}
+Data <- read.csv("F:/Semester 5/MPDW/Data Tugas 2.csv")
+Data
+View(Data)
+
+#Variabel y merupakan variabel value, X1 merupakan Harvested dan X2 merupakan price
+
+Y <- Data$Y
+X1 <- Data$X1
+X2 <- Data$X2
+
+```
+3. Membuat plot antar variabel
+```{r}
+#variabel Y dan X1
+
+plot(Y, X1, pch = 20, col = "blue",
+     xlab = "X1",
+     ylab = "Y")
+
+#variabel Y dan X2
+plot(Y, X2, col = "blue",
+     xlab = "X2",
+     ylab = "Y")
+```
+4. Membuat plot time series
+```{r}
+ts.plot(ts(Y), xlab="Time Period", ylab="Value", main="Time Series Plot of Value")
+points(ts(Y))
+
+ts.plot(ts(X1), xlab="Time Period", ylab="Repsol Open", main="Time Series Plot of Harvested")
+points(ts(X1))
+
+ts.plot(ts(X2), xlab="Time Period", ylab="Repsol Low", main="Time Series Plot of Price")
+points(ts(X2))
+```
+5.Regresi
+```{r}
+model <- lm(Y~X1+X2, data=Data)
+model
+summary(model)
+#sehingga diperoleh model y = -118183315 + 5918 X1 + 85650 X2
+# sisaan dan fitted value
+sisaan <- residuals(model)
+fitValue<- predict(model)
+
+```
+
+6. ACF dan PACF identifikasi autokorelasi
+```{r}
+par(mfrow = c(1,2))
+acf(sisaan)
+pacf(sisaan)
+
+#Berdasarkan plot ACF dan PACF, terlihat ada yang tidak di dalam rentang batas, sehingga mengindikasikan terjadinya autokorelasi. Namun, untuk lebih memastikan akan dilakukan uji formal dengan uji Durbin Watson.
+
+#uji durbin watson
+dwtest(model)
+
+#uji runtest
+lawstat::runs.test(resid(model), alternative = 'two.sided')
+#karena p value dari run test kecil dari 0.05 maka terdapat autokorelaso
+```
+7. Penanganan Autokorelasi
+# Metode Cochrane-Orcutt
+Penanganan metode Cochrane-Orcutt dapat dilakukan dengan bantuan packages Orcutt pada aplikasi `R` maupun secara manual. Berikut ini ditampilkan cara menggunakan bantuan `library` *packages* `Orcutt`.
+```{r}
+modelCO<-cochrane.orcutt(model)
+modelCO
+```
+Hasil keluaran model setelah dilakukan penanganan adalah $$y=-1.18*10^8+5.91*10^3x1_t+8.56*10^4x2_t$$ dengan p-value sebesar 0.53 > alpha (5%), artinya belum cukup bukti menyatakan bahwa sisaan terdapat autokorelasi pada taraf nyata 5%. 
+#Rho optimum
+```{r}
+rho<- modelCO$rho
+rho
+```
+
+Selanjutnya akan dilakukan transformasi secara manual dengan syntax berikut ini.
+# Transformasi Manual
+```{r}
+Y.trans <- Y[-1]-Y[-100]*rho
+X1.trans <- X1[-1]-X1[-100]*rho
+X2.trans <- X2[-1]-X2[-100]*rho
+modelCOmanual <- lm(Y.trans~X1.trans+X2.trans)
+summary(modelCOmanual)
+```
+Hasil model transformasi bukan merupakan model sesungguhnya. Koefisien regresi masih perlu dicari kembali mengikuti $β_0^*=β_0+ρ ̂β_0$ dan $β_1^*=β_1$.
+
+#Mencari Penduga Koefisien Regresi setelah Transformasi ke Persamaan Awal
+```{r}
+b0bintang <- modelCOmanual$coefficients[1]
+b0 <- b0bintang/(1-rho)
+b1.1 <- modelCOmanual$coefficients[2]
+b2.1 <- modelCOmanual$coefficients[3]
+b0
+b1.1
+b2.1
+```
+8. Metode Hildreth-Lu
+Penanganan kedua adalah menggunakan metode Hildreth-Lu. Metode ini akan mencari nilai SSE terkecil dan dapat dicari secara manual maupun menggunakan packages. Jika menggunakan packages, gunakan `library` *packages* `HORM`.
+
+#Penanganan Autokorelasi Hildreth lu
+# Hildreth-Lu
+```{r}
+hildreth.lu.func<- function(r, model){
+  x1 <- model.matrix(model)[,2]
+  x2 <- model.matrix(model)[,3]
+  y <- model.response(model.frame(model))
+  n <- length(y)
+  t <- 2:n
+  y <- y[t]-r*y[t-1]
+  x1 <- x1[t]-r*x1[t-1]
+  x2 <- x2[t]-r*x2[t-1]
+  
+  return(lm(y~x1+x2))
+}
+
+#Pencariab rho yang meminimumkan SSE
+r <- c(seq(0.1,0.9, by= 0.1))
+tab <- data.frame("rho" = r, "SSE" = sapply(r, function(i){deviance(hildreth.lu.func(i, model))}))
+tab
+```
+Pertama-tama akan dicari di mana kira-kira $ρ$ yang menghasilkan SSE minimum. Pada hasil di atas terlihat $ρ$ minimum ketika 0.8. Namun, hasil tersebut masih kurang teliti sehingga akan dicari kembali $ρ$ yang lebih optimum dengan ketelitian yang lebih. Jika sebelumnya jarak antar $ρ$ yang dicari adalah 0.1, kali ini jarak antar $ρ$ adalah 0.001 dan dilakukan pada selang 0.8 sampai dengan 0.9.
+
+# Rho optimum di sekitar 0.8
+```{r}
+rOpt <- seq(0.8,0.9, by= 0.001)
+tabOpt <- data.frame("rho" = rOpt, "SSE" = sapply(rOpt, function(i){deviance(hildreth.lu.func(i, model))}))
+head(tabOpt[order(tabOpt$SSE),])
+```
+
+# Grafik SSE optimum
+```{r}
+par(mfrow = c(1,1))
+plot(tab$SSE ~ tab$rho , type = "l", xlab = "Rho", ylab = "SSE")
+abline(v = tabOpt[tabOpt$SSE==min(tabOpt$SSE),"rho"], lty = 2, col="red",lwd=2)
+text(x=0.804, y=1.065106e+18	, labels = "rho=0.804", cex = 0.8)
+```
+Perhitungan yang dilakukan aplikasi `R` menunjukkan bahwa nilai $ρ$ optimum, yaitu saat SSE terkecil terdapat pada nilai $ρ=0.1.065106e+18	$. Hal tersebut juga ditunjukkan pada plot. Selanjutnya, model dapat didapatkan dengan mengevaluasi nilai $ρ$ ke dalam fungsi `hildreth.lu.func`, serta dilanjutkan dengan pengujian autokorelasi dengan uji Durbin-Watson. Namun, setelah pengecekan tersebut tidak lupa koefisien regresi tersebut digunakan untuk transformasi balik. Persamaan hasil transformasi itulah yang menjadi persamaan sesungguhnya.
+
+# Model Terbaik
+```{r}
+modelHL <- hildreth.lu.func(0.804, model)
+summary(modelHL)
+```
+
+# Transformasi Balik
+```{r}
+cat("y = ", coef(modelHL)[1]/(1-0.804), "+", coef(modelHL)[2],"x1","+", coef(modelHL)[3],"x2", sep = "")
+```
+Setelah dilakukan tranformasi balik, didapatkan model dengan metode Hildreth-Lu sebagai berikut.
+y = -121198514+6025.247x1+86851.14x2
+
+# Deteksi Autokorelasi
+```{r}
+dwtest(modelHL)
+```
+Hasil uji Durbin-Watson juga menunjukkan bahwa *p-value* sebesar 1, di mana *p-value* \> $\alpha=5%$. Artinya tak tolak $H_0$ atau belum cukup bukti menyatakan bahwa ada autokorelasi dalam data nilai volume dengan metode Hildreth-Lu pada taraf nyata 5%.
+
+# Perbandingan Keakuratan
+```{r}
+sseModelawal <- anova(model)$`Sum Sq`[c(-1,-2)]
+sseModelCO <- anova(modelCOmanual)$`Sum Sq`[c(-1,-2)]
+sseModelHL <- anova(modelHL)$`Sum Sq`[c(-1,-2)]
+mseModelawal <- sseModelawal/length(Y.trans)
+mseModelCO <- sseModelCO/length(Y.trans)
+mseModelHL <- sseModelHL/length(Y.trans)
+akurasi <- matrix(c(sseModelawal,sseModelCO,sseModelHL,
+                    mseModelawal,mseModelCO,mseModelHL),nrow=2,ncol=3,byrow = T)
+colnames(akurasi) <- c("Model Awal", "Model Cochrane-Orcutt", "Model Hildreth-Lu")
+row.names(akurasi) <- c("SSE","MSE")
+akurasi
+```
