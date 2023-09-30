@@ -1,0 +1,130 @@
+---
+title: "MPDW 5"
+author: "Alfikri Ihsan"
+date: "2023-09-26"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+```
+
+1. Memasukkan data
+```{r}
+Data <- read_xlsx("F:/Semester 5/MPDW/Data Harga Cabai Merah.xlsx")
+Dataa <- Data$Harga
+```
+
+2. plot time series
+```{r}
+data <- ts(Dataa)
+plot.ts(data)
+```
+Data tidak stasioner dalam rataan dan ragam
+
+3. plot ACF
+```{r}
+acf(data)
+```
+Berdasarkan plot ACF terlihat bahwa data menurun secara Tails off slowly, sehingga dapat disimpulkan data tidak stasioner dalam rataan
+
+4. uji ADF
+```{r}
+adf.test(data)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.6447 yang lebih besar dari taraf nyata 5% dan menandakan bahwa data tidak stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF
+
+5. plot box cox
+```{r}
+index <- seq(1:138)
+bc = boxcox(data~index, lambda = seq(-2,1,by=0.001))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+dari plot box cox dalam selang kepercayaan 95% terlihat tidak mengandung lambda = 1, sehingga dapat disimpulkan bahwa data tidak stasioner dalam ragam
+
+
+###Partisi data
+##Partisi 1
+1. partisi 1
+```{r}
+data1 <- data[1:75] |> ts()
+mean(data1)
+var(data1)
+
+plot.ts(data1)
+```
+2. plot ACF partisi 1
+```{r}
+acf(data1)
+```
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut menurun secara perlahan (*tails off slowly*) yang menandakan data tidak stasioner dalam rataan
+
+3. uji ADF
+```{r}
+adf.test(data1)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+diperoleh nilai p value > dari taraf 5% sehingga dapat disimpulkan bahwa data partisi 1 tidak stasioner dalam rataan sesuai dengan plot ACF
+
+4. plot box cox
+```{r}
+index <- seq(1:75)
+bc = boxcox(data1~index, lambda = seq(-2,2,by=0.1))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+Dari plot box cox dapat dilihat dalam selang kepercayaan 95% tidak mengandung lambda = 1, sehingga dapat disimpulkan bahwa data tidak stasioner dalam ragam
+
+##Partisi 2
+1. Partisi 2
+```{r}
+data2 <- data[76:138] |> ts()
+mean(data2)
+var(data2)
+
+plot.ts(data2)
+```
+2. plot ACF partisi 2
+```{r}
+acf(data2)
+```
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut menurun secara perlahan (*tails off slowly*) yang menandakan data tidak stasioner dalam rataan
+
+3. uji ADF partisi 2
+```{r}
+adf.test(data2)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+diperoleh nilai p value > dari taraf 5% sehingga dapat disimpulkan bahwa data partisi 1 tidak stasioner dalam rataan sesuai dengan plot ACF
+
+4. plot box cox
+```{r}
+index <- seq(1:63)
+bc = boxcox(data2~index, lambda = seq(-3,2,by=0.01))
+#Nilai Rounded Lambda
+lambda <- bc$x[which.max(bc$y)]
+lambda
+#SK
+bc$x[bc$y > max(bc$y) - 1/2 * qchisq(.95,1)]
+```
+Dari plot box cox dapat dilihat dalam selang kepercayaan 95% tidak mengandung lambda = 1, sehingga dapat disimpulkan bahwa data tidak stasioner dalam ragam
+
+
+
